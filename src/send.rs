@@ -4,6 +4,14 @@ use bifrost::{Discovery, Node, NodeId, Session, Transport};
 use bifrost_wire::{Blob, Transfer};
 use clap::Args;
 use eyre::WrapErr as _;
+use futures::StreamExt as _;
+use futures::stream::FuturesUnordered;
+use indicatif::MultiProgress;
+
+use crate::progress::{self, ProgressReader};
+
+/// Files send concurrently over separate streams, capped so one connection is not flooded.
+const MAX_INFLIGHT: usize = 16;
 
 /// Send files or directories to a peer, addressed by their node id.
 #[derive(Debug, Args)]
@@ -23,34 +31,60 @@ impl SendCmd {
             .await
             .wrap_err_with(|| format!("could not reach {}", self.peer.short()))?;
 
-        // One stream per file; a directory expands to its files under relative paths.
+        // Expand directories, then pipeline up to MAX_INFLIGHT files over concurrent streams.
+        let mut files = Vec::new();
         for path in &self.paths {
-            for (name, source_path) in collect_files(path).await? {
-                let blob = {
-                    let mut file = tokio::fs::File::open(&source_path)
-                        .await
-                        .wrap_err_with(|| format!("open {}", source_path.display()))?;
-                    Blob::hash(&mut file).await?
-                };
+            files.extend(collect_files(path).await?);
+        }
 
-                let (send, recv) = session.open_bi().await?;
-                let file = tokio::fs::File::open(&source_path)
-                    .await
-                    .wrap_err_with(|| format!("open {}", source_path.display()))?;
-                let bar = crate::progress::bar(blob.len(), &name);
-                let mut source = crate::progress::ProgressReader::new(file, bar.clone());
-                Transfer::new(send, recv)
-                    .send(name.as_bytes(), &blob, &mut source)
-                    .await?;
-                bar.finish_and_clear();
-
-                println!("sent {name} ({} bytes)", blob.len());
+        let multi = progress::multi();
+        let mut pending = files.into_iter();
+        let mut sending = FuturesUnordered::new();
+        for _ in 0..MAX_INFLIGHT {
+            match pending.next() {
+                Some((name, path)) => sending.push(send_one(&session, &multi, name, path)),
+                None => break,
+            }
+        }
+        while let Some(result) = sending.next().await {
+            result?;
+            if let Some((name, path)) = pending.next() {
+                sending.push(send_one(&session, &multi, name, path));
             }
         }
 
         node.close().await;
         Ok(())
     }
+}
+
+/// Send one file over its own stream, showing a progress bar.
+async fn send_one<S: Session>(
+    session: &S,
+    multi: &MultiProgress,
+    name: String,
+    path: PathBuf,
+) -> eyre::Result<()> {
+    let blob = {
+        let mut file = tokio::fs::File::open(&path)
+            .await
+            .wrap_err_with(|| format!("open {}", path.display()))?;
+        Blob::hash(&mut file).await?
+    };
+
+    let (send, recv) = session.open_bi().await?;
+    let file = tokio::fs::File::open(&path)
+        .await
+        .wrap_err_with(|| format!("open {}", path.display()))?;
+    let bar = multi.add(progress::bar(blob.len(), &name));
+    let mut source = ProgressReader::new(file, bar.clone());
+    Transfer::new(send, recv)
+        .send(name.as_bytes(), &blob, &mut source)
+        .await?;
+    bar.finish_and_clear();
+
+    println!("sent {name} ({} bytes)", blob.len());
+    Ok(())
 }
 
 /// Collect `(relative name, path)` pairs to send: a file yields itself; a directory yields every file

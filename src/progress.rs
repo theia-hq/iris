@@ -7,14 +7,21 @@ use std::io::IsTerminal as _;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use tokio::io::{self, AsyncRead, AsyncWrite, ReadBuf};
 
-/// A progress bar for a transfer of known length, or a hidden no-op bar off a terminal.
-pub fn bar(len: u64, name: &str) -> ProgressBar {
+/// A container for the concurrent per-file bars, hidden when stderr is not a terminal so scripted and
+/// piped use stays clean. Bars added to it inherit its visibility.
+pub fn multi() -> MultiProgress {
+    let multi = MultiProgress::new();
     if !std::io::stderr().is_terminal() {
-        return ProgressBar::hidden();
+        multi.set_draw_target(ProgressDrawTarget::hidden());
     }
+    multi
+}
+
+/// A progress bar for a transfer of known length. Add it to a [`multi`] to control visibility.
+pub fn bar(len: u64, name: &str) -> ProgressBar {
     let bar = ProgressBar::new(len);
     bar.set_style(
         ProgressStyle::with_template(
@@ -27,11 +34,8 @@ pub fn bar(len: u64, name: &str) -> ProgressBar {
     bar
 }
 
-/// A byte spinner for a transfer of unknown length, or a hidden no-op bar off a terminal.
+/// A byte spinner for a transfer of unknown length. Add it to a [`multi`] to control visibility.
 pub fn spinner() -> ProgressBar {
-    if !std::io::stderr().is_terminal() {
-        return ProgressBar::hidden();
-    }
     let bar = ProgressBar::new_spinner();
     bar.set_style(
         ProgressStyle::with_template(

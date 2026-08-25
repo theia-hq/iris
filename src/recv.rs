@@ -1,10 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use bifrost::{Discovery, Node, Session, Transport};
+use bifrost::{Discovery, Node, NodeId, Session, Transport};
 use bifrost_wire::Transfer;
 use clap::Args;
 use eyre::WrapErr as _;
-use tokio::io::AsyncWriteExt as _;
+use futures::StreamExt as _;
+use futures::stream::FuturesUnordered;
+use indicatif::MultiProgress;
+use tokio::io::{self, AsyncWriteExt as _};
+
+use crate::progress::{self, ProgressWriter};
 
 /// Wait to receive files into a directory, saving each until the sender is done.
 #[derive(Debug, Args)]
@@ -22,47 +27,32 @@ impl RecvCmd {
 
         let session = node.accept().await.wrap_err("waiting for a sender")?;
         let peer = session.peer();
+        let multi = progress::multi();
 
-        // One stream per file; the loop ends when the sender closes the session.
-        let mut count = 0;
-        while let Ok((send, recv)) = session.accept_bi().await {
-            let temp = self
-                .out
-                .join(format!(".iris-{}-{count}.part", std::process::id()));
-            let spinner = crate::progress::spinner();
-            let received = {
-                let file = tokio::fs::File::create(&temp).await?;
-                let mut sink = crate::progress::ProgressWriter::new(file, spinner.clone());
-                match Transfer::new(send, recv).recv(&mut sink).await {
-                    Ok(received) => {
-                        sink.flush().await?;
-                        spinner.finish_and_clear();
-                        received
-                    }
-                    Err(err) => {
-                        spinner.finish_and_clear();
-                        drop(sink);
-                        let _ = tokio::fs::remove_file(&temp).await;
-                        return Err(err.into());
+        // Receive streams concurrently as the sender opens them; the sender's close ends the loop.
+        let mut receiving = FuturesUnordered::new();
+        let mut opened = 0usize;
+        let mut count = 0usize;
+        loop {
+            tokio::select! {
+                accepted = session.accept_bi() => {
+                    match accepted {
+                        Ok((send, recv)) => {
+                            let index = opened;
+                            opened += 1;
+                            receiving.push(receive_one(send, recv, self.out.clone(), multi.clone(), peer, index));
+                        }
+                        Err(_) => break,
                     }
                 }
-            };
-
-            let relative = safe_relative_path(&received.header);
-            let final_path = self.out.join(&relative);
-            if let Some(parent) = final_path.parent() {
-                tokio::fs::create_dir_all(parent).await?;
+                Some(result) = receiving.next(), if !receiving.is_empty() => {
+                    result?;
+                    count += 1;
+                }
             }
-            tokio::fs::rename(&temp, &final_path)
-                .await
-                .wrap_err_with(|| format!("save to {}", final_path.display()))?;
-
-            println!(
-                "received {} ({} bytes) from {}",
-                relative.display(),
-                received.blob.len(),
-                peer.short()
-            );
+        }
+        while let Some(result) = receiving.next().await {
+            result?;
             count += 1;
         }
 
@@ -72,6 +62,57 @@ impl RecvCmd {
         println!("received {count} file(s), saved to {}", self.out.display());
         Ok(())
     }
+}
+
+/// Receive one stream into a temp file, verify, then move it into place under `out`.
+async fn receive_one<W, R>(
+    writer: W,
+    reader: R,
+    out: PathBuf,
+    multi: MultiProgress,
+    peer: NodeId,
+    index: usize,
+) -> eyre::Result<()>
+where
+    W: io::AsyncWrite + Unpin,
+    R: io::AsyncRead + Unpin,
+{
+    let temp = out.join(format!(".iris-{}-{index}.part", std::process::id()));
+    let spinner = multi.add(progress::spinner());
+    let received = {
+        let file = tokio::fs::File::create(&temp).await?;
+        let mut sink = ProgressWriter::new(file, spinner.clone());
+        match Transfer::new(writer, reader).recv(&mut sink).await {
+            Ok(received) => {
+                sink.flush().await?;
+                spinner.finish_and_clear();
+                received
+            }
+            Err(err) => {
+                spinner.finish_and_clear();
+                drop(sink);
+                let _ = tokio::fs::remove_file(&temp).await;
+                return Err(err.into());
+            }
+        }
+    };
+
+    let relative = safe_relative_path(&received.header);
+    let final_path = out.join(&relative);
+    if let Some(parent) = final_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::rename(&temp, &final_path)
+        .await
+        .wrap_err_with(|| format!("save to {}", final_path.display()))?;
+
+    println!(
+        "received {} ({} bytes) from {}",
+        relative.display(),
+        received.blob.len(),
+        peer.short()
+    );
+    Ok(())
 }
 
 /// Reduce a peer-supplied header to a safe relative path under `out`: keep only normal components,

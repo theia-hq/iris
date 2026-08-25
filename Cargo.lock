@@ -1501,6 +1501,7 @@ dependencies = [
  "bifrost-wire",
  "clap",
  "eyre",
+ "futures",
  "indicatif",
  "rand 0.8.8",
  "tokio",
