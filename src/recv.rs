@@ -44,14 +44,18 @@ impl RecvCmd {
                 }
             };
 
-            let name = safe_file_name(&received.header);
-            let final_path = self.out.join(&name);
+            let relative = safe_relative_path(&received.header);
+            let final_path = self.out.join(&relative);
+            if let Some(parent) = final_path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
             tokio::fs::rename(&temp, &final_path)
                 .await
                 .wrap_err_with(|| format!("save to {}", final_path.display()))?;
 
             println!(
-                "received {name} ({} bytes) from {}",
+                "received {} ({} bytes) from {}",
+                relative.display(),
                 received.blob.len(),
                 peer.short()
             );
@@ -66,13 +70,18 @@ impl RecvCmd {
     }
 }
 
-/// Reduce a peer-supplied header to a safe bare file name, so a peer cannot write outside `out`.
-fn safe_file_name(header: &[u8]) -> String {
+/// Reduce a peer-supplied header to a safe relative path under `out`: keep only normal components,
+/// dropping roots, prefixes, and `..`, so a peer cannot write outside the output directory.
+fn safe_relative_path(header: &[u8]) -> PathBuf {
     let raw = String::from_utf8_lossy(header);
-    Path::new(raw.as_ref())
-        .file_name()
-        .and_then(|component| component.to_str())
-        .filter(|component| !component.is_empty())
-        .unwrap_or("download")
-        .to_owned()
+    let mut safe = PathBuf::new();
+    for component in Path::new(raw.as_ref()).components() {
+        if let std::path::Component::Normal(part) = component {
+            safe.push(part);
+        }
+    }
+    if safe.as_os_str().is_empty() {
+        safe.push("download");
+    }
+    safe
 }

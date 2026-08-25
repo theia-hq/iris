@@ -5,20 +5,28 @@ use bifrost_mem::MemTransport;
 use iris::recv::RecvCmd;
 use iris::send::SendCmd;
 
-/// Multiple files transfer intact from sender to receiver over the in-memory transport.
+/// A standalone file and a nested directory transfer intact, tree preserved, over the mem transport.
 #[tokio::test]
-async fn transfers_multiple_files() {
+async fn transfers_files_and_directories() {
     let base = std::env::temp_dir().join(format!("iris-test-{}", std::process::id()));
     let src = base.join("src");
+    let nested = src.join("nested");
     let out = base.join("out");
-    tokio::fs::create_dir_all(&src).await.unwrap();
+    tokio::fs::create_dir_all(&nested).await.unwrap();
     tokio::fs::create_dir_all(&out).await.unwrap();
 
-    let alpha = src.join("alpha.txt");
-    let beta = src.join("beta.bin");
-    tokio::fs::write(&alpha, b"alpha contents").await.unwrap();
+    let solo = base.join("solo.txt");
+    tokio::fs::write(&solo, b"solo file").await.unwrap();
+    tokio::fs::write(src.join("alpha.txt"), b"alpha contents")
+        .await
+        .unwrap();
     let beta_bytes: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
-    tokio::fs::write(&beta, &beta_bytes).await.unwrap();
+    tokio::fs::write(src.join("beta.bin"), &beta_bytes)
+        .await
+        .unwrap();
+    tokio::fs::write(nested.join("gamma.txt"), b"deep file")
+        .await
+        .unwrap();
 
     let receiver = Node::new(MemTransport::bind(), NoDiscovery);
     let receiver_id = receiver.node_id();
@@ -28,7 +36,7 @@ async fn transfers_multiple_files() {
         let (sent, received) = tokio::join!(
             SendCmd {
                 peer: receiver_id,
-                paths: vec![alpha.clone(), beta.clone()]
+                paths: vec![solo.clone(), src.clone()]
             }
             .run(&sender),
             RecvCmd { out: out.clone() }.run(&receiver),
@@ -40,12 +48,22 @@ async fn transfers_multiple_files() {
     .expect("transfer timed out");
 
     assert_eq!(
-        tokio::fs::read(out.join("alpha.txt")).await.unwrap(),
+        tokio::fs::read(out.join("solo.txt")).await.unwrap(),
+        b"solo file"
+    );
+    assert_eq!(
+        tokio::fs::read(out.join("src/alpha.txt")).await.unwrap(),
         b"alpha contents"
     );
     assert_eq!(
-        tokio::fs::read(out.join("beta.bin")).await.unwrap(),
+        tokio::fs::read(out.join("src/beta.bin")).await.unwrap(),
         beta_bytes
+    );
+    assert_eq!(
+        tokio::fs::read(out.join("src/nested/gamma.txt"))
+            .await
+            .unwrap(),
+        b"deep file"
     );
 
     let _ = tokio::fs::remove_dir_all(&base).await;
