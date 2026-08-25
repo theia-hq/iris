@@ -29,14 +29,18 @@ impl RecvCmd {
             let temp = self
                 .out
                 .join(format!(".iris-{}-{count}.part", std::process::id()));
+            let spinner = crate::progress::spinner();
             let received = {
-                let mut sink = tokio::fs::File::create(&temp).await?;
+                let file = tokio::fs::File::create(&temp).await?;
+                let mut sink = crate::progress::ProgressWriter::new(file, spinner.clone());
                 match Transfer::new(send, recv).recv(&mut sink).await {
                     Ok(received) => {
                         sink.flush().await?;
+                        spinner.finish_and_clear();
                         received
                     }
                     Err(err) => {
+                        spinner.finish_and_clear();
                         drop(sink);
                         let _ = tokio::fs::remove_file(&temp).await;
                         return Err(err.into());

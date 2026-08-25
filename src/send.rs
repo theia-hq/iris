@@ -34,12 +34,15 @@ impl SendCmd {
                 };
 
                 let (send, recv) = session.open_bi().await?;
-                let mut source = tokio::fs::File::open(&source_path)
+                let file = tokio::fs::File::open(&source_path)
                     .await
                     .wrap_err_with(|| format!("open {}", source_path.display()))?;
+                let bar = crate::progress::bar(blob.len(), &name);
+                let mut source = crate::progress::ProgressReader::new(file, bar.clone());
                 Transfer::new(send, recv)
                     .send(name.as_bytes(), &blob, &mut source)
                     .await?;
+                bar.finish_and_clear();
 
                 println!("sent {name} ({} bytes)", blob.len());
             }
