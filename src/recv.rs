@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use bifrost::{Discovery, Node, Session, Transport};
 use bifrost_wire::Transfer;
 use clap::Args;
+use eyre::WrapErr as _;
 use tokio::io::AsyncWriteExt as _;
 
 /// Wait to receive a single file, then exit.
@@ -43,7 +44,9 @@ impl RecvCmd {
 
         let name = safe_file_name(&received.header);
         let final_path = self.out.join(&name);
-        tokio::fs::rename(&temp, &final_path).await?;
+        tokio::fs::rename(&temp, &final_path)
+            .await
+            .wrap_err_with(|| format!("save to {}", final_path.display()))?;
         session.wait_closed().await;
 
         println!(

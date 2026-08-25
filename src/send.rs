@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use bifrost::{Discovery, Node, NodeId, Session, Transport};
 use bifrost_wire::{Blob, Transfer};
 use clap::Args;
+use eyre::WrapErr as _;
 
 /// Send a file to a peer, addressed by their node id.
 #[derive(Debug, Args)]
@@ -23,15 +24,22 @@ impl SendCmd {
 
         // Files are the app's concern: hash it, then stream it. The wire only sees bytes.
         let blob = {
-            let mut file = tokio::fs::File::open(&path).await?;
+            let mut file = tokio::fs::File::open(&path)
+                .await
+                .wrap_err_with(|| format!("open {}", path.display()))?;
             Blob::hash(&mut file).await?
         };
 
         println!("connecting to {}...", peer.short());
-        let session = node.connect(peer).await?;
+        let session = node
+            .connect(peer)
+            .await
+            .wrap_err_with(|| format!("could not reach {}", peer.short()))?;
         let (send, recv) = session.open_bi().await?;
 
-        let mut source = tokio::fs::File::open(&path).await?;
+        let mut source = tokio::fs::File::open(&path)
+            .await
+            .wrap_err_with(|| format!("open {}", path.display()))?;
         Transfer::new(send, recv)
             .send(name.as_bytes(), &blob, &mut source)
             .await?;
