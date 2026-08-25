@@ -6,6 +6,7 @@
 use bifrost::{NoDiscovery, Node};
 use clap::{Parser, Subcommand};
 
+mod identity;
 mod recv;
 mod send;
 
@@ -37,8 +38,13 @@ async fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     // The one and only place a concrete transport is named. Everything downstream speaks `bifrost`.
-    // iroh self-discovers (n0 pkarr/DNS + relays), so it composes with NoDiscovery.
-    let node = Node::new(bifrost_iroh::Endpoint::bind().await?, NoDiscovery);
+    // iroh self-discovers (n0 pkarr/DNS + relays), so it composes with NoDiscovery. The identity is
+    // persisted so this node keeps the same address across runs.
+    let secret = identity::load_or_create().await?;
+    let node = Node::new(
+        bifrost_iroh::Endpoint::bind_with_secret(secret).await?,
+        NoDiscovery,
+    );
 
     match cli.command {
         Command::Recv(cmd) => cmd.run(&node).await,
