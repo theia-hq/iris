@@ -31,13 +31,21 @@ impl SendCmd {
             .await
             .wrap_err_with(|| format!("could not reach {}", self.peer.short()))?;
 
-        // Expand directories, then pipeline up to MAX_INFLIGHT files over concurrent streams.
+        // Expand directories, then pipeline up to MAX_INFLIGHT files over concurrent streams. A file
+        // that cannot be read is skipped and reported, not fatal: a courier should send what it can.
+        let multi = progress::multi();
         let mut files = Vec::new();
+        let mut failures = 0usize;
         for path in &self.paths {
-            files.extend(collect_files(path).await?);
+            match collect_files(path).await {
+                Ok(collected) => files.extend(collected),
+                Err(error) => {
+                    eprintln!("skip {}: {error:#}", path.display());
+                    failures += 1;
+                }
+            }
         }
 
-        let multi = progress::multi();
         let mut pending = files.into_iter();
         let mut sending = FuturesUnordered::new();
         for _ in 0..MAX_INFLIGHT {
@@ -47,13 +55,19 @@ impl SendCmd {
             }
         }
         while let Some(result) = sending.next().await {
-            result?;
+            if let Err(error) = result {
+                eprintln!("skip: {error:#}");
+                failures += 1;
+            }
             if let Some((name, path)) = pending.next() {
                 sending.push(send_one(&session, &multi, name, path));
             }
         }
 
         node.close().await;
+        if failures > 0 {
+            eyre::bail!("{failures} item(s) could not be sent");
+        }
         Ok(())
     }
 }

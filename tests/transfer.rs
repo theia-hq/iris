@@ -68,3 +68,40 @@ async fn transfers_files_and_directories() {
 
     let _ = tokio::fs::remove_dir_all(&base).await;
 }
+
+/// A missing path is skipped and reported; the good file still transfers and send reports the failure.
+#[tokio::test]
+async fn skips_missing_paths_and_continues() {
+    let base = std::env::temp_dir().join(format!("iris-skip-test-{}", std::process::id()));
+    let out = base.join("out");
+    tokio::fs::create_dir_all(&out).await.unwrap();
+    let good = base.join("good.txt");
+    tokio::fs::write(&good, b"i made it").await.unwrap();
+    let missing = base.join("nope.txt");
+
+    let receiver = Node::new(MemTransport::bind(), NoDiscovery);
+    let receiver_id = receiver.node_id();
+    let sender = Node::new(MemTransport::bind(), NoDiscovery);
+
+    let (sent, received) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(
+            SendCmd {
+                peer: receiver_id,
+                paths: vec![good.clone(), missing]
+            }
+            .run(&sender),
+            RecvCmd { out: out.clone() }.run(&receiver),
+        )
+    })
+    .await
+    .expect("transfer timed out");
+
+    assert!(sent.is_err(), "send reports the skipped file");
+    received.unwrap();
+    assert_eq!(
+        tokio::fs::read(out.join("good.txt")).await.unwrap(),
+        b"i made it"
+    );
+
+    let _ = tokio::fs::remove_dir_all(&base).await;
+}
