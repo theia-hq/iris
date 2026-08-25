@@ -227,6 +227,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bifrost-mem"
+version = "0.0.0"
+dependencies = [
+ "bifrost-core",
+ "bifrost-transport",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "bifrost-transport"
 version = "0.0.0"
 dependencies = [
@@ -1455,6 +1465,7 @@ version = "0.0.0"
 dependencies = [
  "bifrost",
  "bifrost-iroh",
+ "bifrost-mem",
  "bifrost-wire",
  "clap",
  "eyre",

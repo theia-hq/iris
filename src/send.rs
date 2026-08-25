@@ -9,10 +9,10 @@ use eyre::WrapErr as _;
 #[derive(Debug, Args)]
 pub struct SendCmd {
     /// The recipient's node id, as printed by `iris recv`.
-    peer: NodeId,
+    pub peer: NodeId,
     /// The files to send.
     #[arg(required = true)]
-    paths: Vec<PathBuf>,
+    pub paths: Vec<PathBuf>,
 }
 
 impl SendCmd {

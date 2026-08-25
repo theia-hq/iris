@@ -11,7 +11,7 @@ use tokio::io::AsyncWriteExt as _;
 pub struct RecvCmd {
     /// Directory to write received files into.
     #[arg(short, long, default_value = ".")]
-    out: PathBuf,
+    pub out: PathBuf,
 }
 
 impl RecvCmd {

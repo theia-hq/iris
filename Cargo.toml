@@ -12,5 +12,8 @@ bifrost-wire = { path = "../bifrost/crates/bifrost-wire" }
 clap = { version = "4", features = ["derive"] }
 eyre = "0.6"
 rand = "0.8"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "time"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+bifrost-mem = { path = "../bifrost/crates/transports/bifrost-mem" }
