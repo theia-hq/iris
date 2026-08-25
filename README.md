@@ -24,10 +24,10 @@ On the receiver, print your address and wait:
 iris recv
 ```
 
-On the sender, dial that address and stream a file:
+On the sender, dial that address and stream one or more files:
 
 ```sh
-iris send <path> <address>
+iris send <address> file1.txt file2.png
 ```
 
 The address is the receiver's `NodeId`, printed by `iris recv`.

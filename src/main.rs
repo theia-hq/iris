@@ -1,7 +1,7 @@
 //! Iris: a verifiable file courier over the Bifrost overlay.
 //!
-//! `iris recv` prints this node's address and waits; `iris send <path> <address>` dials that identity
-//! and streams a file, verified end to end. You send to who someone is, not where they are.
+//! `iris recv` prints this node's address and waits; `iris send <address> <path>...` dials that
+//! identity and streams files, verified end to end. You send to who someone is, not where they are.
 
 use bifrost::{NoDiscovery, Node};
 use clap::{Parser, Subcommand};
@@ -23,9 +23,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Wait to receive a file. Prints this node's address to share with a sender.
+    /// Wait to receive files. Prints this node's address to share with a sender.
     Recv(RecvCmd),
-    /// Send a file to a peer's address.
+    /// Send files to a peer's address.
     Send(SendCmd),
 }
 
