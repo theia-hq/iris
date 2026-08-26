@@ -37,7 +37,8 @@ The address is the receiver's `NodeId`, printed by `iris recv`.
 - The transport is iroh today (self-discovering via n0 relays and DNS); the courier itself is
   transport-blind and rides any bifrost transport.
 - Transfers are content-addressed and BLAKE3-verified; tampering or truncation is rejected.
-- Identity is ephemeral per process for now — no persisted keypair yet, so the address changes each run.
+- Identity is persisted (an ed25519 key at `IRIS_KEY` or `~/.config/iris/identity.key`), so your
+  address stays stable across runs.
 
 ## License
 
