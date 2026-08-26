@@ -3,9 +3,9 @@
 //! Bars render only when stderr is a terminal, and always draw to stderr, so piped or scripted use
 //! sees nothing here and the `sent`/`received` lines on stdout stay clean and parseable.
 
+use core::pin::Pin;
+use core::task::{Context, Poll};
 use std::io::IsTerminal as _;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use tokio::io::{self, AsyncRead, AsyncWrite, ReadBuf};
@@ -23,11 +23,14 @@ pub fn multi() -> MultiProgress {
 /// A progress bar for a transfer of known length. Add it to a [`multi`] to control visibility.
 pub fn bar(len: u64, name: &str) -> ProgressBar {
     let bar = ProgressBar::new(len);
+    // The template is a compile-fixed literal, so parsing it can only fail if this source is edited
+    // wrong; the panic then fires in the first test run, never on user input.
+    #[allow(clippy::expect_used)]
     bar.set_style(
         ProgressStyle::with_template(
             "{msg:.bold}  {bar:28.cyan/blue} {bytes:>10}/{total_bytes:<10} {binary_bytes_per_sec:>12}",
         )
-        .unwrap()
+        .expect("static progress template is valid")
         .progress_chars("=> "),
     );
     bar.set_message(name.to_owned());
@@ -37,11 +40,13 @@ pub fn bar(len: u64, name: &str) -> ProgressBar {
 /// A byte spinner for a transfer of unknown length. Add it to a [`multi`] to control visibility.
 pub fn spinner() -> ProgressBar {
     let bar = ProgressBar::new_spinner();
+    // Static template literal; see the note in `bar` for why the expect is unreachable on real input.
+    #[allow(clippy::expect_used)]
     bar.set_style(
         ProgressStyle::with_template(
             "{spinner:.cyan} receiving  {bytes:>10} {binary_bytes_per_sec:>12}",
         )
-        .unwrap(),
+        .expect("static progress template is valid"),
     );
     bar
 }

@@ -6,7 +6,7 @@ use clap::Args;
 use eyre::WrapErr as _;
 use futures::StreamExt as _;
 use futures::stream::FuturesUnordered;
-use indicatif::MultiProgress;
+use indicatif::{MultiProgress, ProgressBar};
 
 use crate::progress::{self, ProgressReader};
 
@@ -91,7 +91,7 @@ async fn send_one<S: Session>(
         .await
         .wrap_err_with(|| format!("open {}", path.display()))?;
     let bar = multi.add(progress::bar(blob.len(), &name));
-    let mut source = ProgressReader::new(file, bar.clone());
+    let mut source = ProgressReader::new(file, ProgressBar::clone(&bar));
     Transfer::new(send, recv)
         .send(name.as_bytes(), &blob, &mut source)
         .await?;

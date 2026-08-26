@@ -6,7 +6,7 @@ use clap::Args;
 use eyre::WrapErr as _;
 use futures::StreamExt as _;
 use futures::stream::FuturesUnordered;
-use indicatif::MultiProgress;
+use indicatif::{MultiProgress, ProgressBar};
 use tokio::io::{self, AsyncWriteExt as _};
 
 use crate::progress::{self, ProgressWriter};
@@ -40,7 +40,7 @@ impl RecvCmd {
                         Ok((send, recv)) => {
                             let index = opened;
                             opened += 1;
-                            receiving.push(receive_one(send, recv, self.out.clone(), multi.clone(), peer, index));
+                            receiving.push(receive_one(send, recv, PathBuf::clone(&self.out), MultiProgress::clone(&multi), peer, index));
                         }
                         Err(_) => break,
                     }
@@ -81,7 +81,7 @@ where
     let spinner = multi.add(progress::spinner());
     let received = {
         let file = tokio::fs::File::create(&temp).await?;
-        let mut sink = ProgressWriter::new(file, spinner.clone());
+        let mut sink = ProgressWriter::new(file, ProgressBar::clone(&spinner));
         match Transfer::new(writer, reader).recv(&mut sink).await {
             Ok(received) => {
                 sink.flush().await?;
