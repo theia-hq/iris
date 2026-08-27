@@ -1,8 +1,7 @@
 # iris
 
-A verifiable file courier over the bifrost overlay. Send a file to a peer addressed by their public
-key, not their location; every transfer is BLAKE3-verified end to end. Built on `bifrost` (reach) and
-`bifrost-wire` (verified transfer).
+Send files to a machine you address by its public key, not its location. Each transfer is hashed on the
+way out and re-hashed on the way in, so a truncated or tampered file is rejected rather than saved.
 
 > Experimental. The CLI and wire format will change; not ready for production use.
 
@@ -21,24 +20,28 @@ or run without installing with `cargo run --`.
 On the receiver, print your address and wait:
 
 ```sh
-iris recv
+$ iris recv
+bf01k2m…  # your address; share it with the sender
 ```
 
-On the sender, dial that address and stream one or more files:
+On the sender, dial that address and send one or more files or directories:
 
 ```sh
-iris send <address> file1.txt file2.png
+iris send bf01k2m… report.pdf photos/
 ```
 
-The address is the receiver's `NodeId`, printed by `iris recv`.
+The address is the receiver's public key, printed by `iris recv`. Received files land in the current
+directory by default; `iris recv --out <dir>` chooses another.
 
 ## Things to know
 
-- The transport is iroh today (self-discovering via n0 relays and DNS); the courier itself is
-  transport-blind and rides any bifrost transport.
-- Transfers are content-addressed and BLAKE3-verified; tampering or truncation is rejected.
-- Identity is persisted (an ed25519 key at `IRIS_KEY` or `~/.config/iris/identity.key`), so your
-  address stays stable across runs.
+- Integrity is checked end to end with BLAKE3: the receiver saves a file only if its hash matches what
+  the sender computed, so tampering or truncation in flight is rejected.
+- Your address is an ed25519 public key, persisted at `IRIS_KEY` or `~/.config/iris/identity.key`, so it
+  stays the same across runs.
+- Files stream in fixed-size chunks; a large transfer is never held whole in memory.
+- The transport today is iroh, which finds a peer and traverses NATs on its own. iris does not depend on
+  it directly and runs over any bifrost transport.
 
 ## License
 
