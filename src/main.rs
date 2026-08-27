@@ -1,7 +1,16 @@
-//! Iris: a verifiable file courier over the Bifrost overlay.
+//! iris: send files to a machine by its public key, verified end to end.
 //!
-//! `iris recv` prints this node's address and waits; `iris send <address> <path>...` dials that
-//! identity and streams files, verified end to end. You send to who someone is, not where they are.
+//! `iris recv` prints this machine's address and waits; `iris send <address> <path>...` dials that
+//! address and sends the given files or directories. You address a peer by who it is (an ed25519 public
+//! key), not where it is, and iris reaches it wherever it is on the internet, across NATs.
+//!
+//! Integrity is checked end to end: the sender hashes each file with BLAKE3 and the receiver re-hashes
+//! as bytes arrive, saving a file only if the hashes match, so a truncated or tampered transfer is
+//! rejected rather than written. Files stream in fixed-size chunks; a large transfer is never held whole
+//! in memory. This machine's address is a persisted key (`--key` / `IRIS_KEY` or
+//! `~/.config/iris/identity.key`), so it stays the same across runs.
+
+use std::path::PathBuf;
 
 use bifrost::{NoDiscovery, Node};
 use clap::{Parser, Subcommand};
@@ -9,10 +18,13 @@ use iris::identity;
 use iris::recv::RecvCmd;
 use iris::send::SendCmd;
 
-/// Send files to a peer, addressed by their public key, verified end to end.
+/// Send files to a machine by its public key, verified end to end.
 #[derive(Debug, Parser)]
 #[command(name = "iris", version, about)]
 struct Cli {
+    /// pin a persisted identity file [env: IRIS_KEY]
+    #[arg(long = "key", env = "IRIS_KEY", global = true)]
+    key: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -36,7 +48,7 @@ async fn main() -> eyre::Result<()> {
     // The one and only place a concrete transport is named. Everything downstream speaks `bifrost`.
     // iroh self-discovers (n0 pkarr/DNS + relays), so it composes with NoDiscovery. The identity is
     // persisted so this node keeps the same address across runs.
-    let secret = identity::load_or_create().await?;
+    let secret = identity::load_or_create(cli.key.as_deref()).await?;
     let node = Node::new(
         bifrost_iroh::Endpoint::bind_with_secret(secret).await?,
         NoDiscovery,

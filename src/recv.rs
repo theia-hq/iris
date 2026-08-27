@@ -15,7 +15,7 @@ use crate::progress::{self, ProgressWriter};
 #[derive(Debug, Args)]
 pub struct RecvCmd {
     /// Directory to write received files into.
-    #[arg(short, long, default_value = ".")]
+    #[arg(short, long, value_name = "dir", default_value = ".")]
     pub out: PathBuf,
 }
 
@@ -23,7 +23,7 @@ impl RecvCmd {
     pub async fn run<T: Transport, D: Discovery>(self, node: &Node<T, D>) -> eyre::Result<()> {
         println!("iris ready. share this address with the sender:\n");
         println!("    {}\n", node.node_id());
-        println!("waiting for a sender...");
+        println!("waiting for a sender. press ctrl-c to stop.");
 
         let session = node.accept().await.wrap_err("waiting for a sender")?;
         let peer = session.peer();

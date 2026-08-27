@@ -17,6 +17,7 @@ const MAX_INFLIGHT: usize = 16;
 #[derive(Debug, Args)]
 pub struct SendCmd {
     /// The recipient's node id, as printed by `iris recv`.
+    #[arg(value_name = "peer")]
     pub peer: NodeId,
     /// The files or directories to send.
     #[arg(required = true)]
