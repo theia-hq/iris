@@ -41,7 +41,7 @@ directory by default; `iris recv --out <dir>` chooses another.
   stays the same across runs.
 - Files stream in fixed-size chunks; a large transfer is never held whole in memory.
 - The transport today is iroh, which finds a peer and traverses NATs on its own. iris does not depend on
-  it directly and runs over any bifrost transport.
+  it directly and runs over any [bifrost](https://github.com/theia-hq/bifrost) transport.
 
 ## License
 
