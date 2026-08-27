@@ -3,6 +3,8 @@
 Send files to a machine you address by its public key, not its location. Each transfer is hashed on the
 way out and re-hashed on the way in, so a truncated or tampered file is rejected rather than saved.
 
+Powered by [bifrost](https://github.com/theia-hq/bifrost) for the keyed connection.
+
 > Experimental. The CLI and wire format will change; not ready for production use.
 
 ## Installation
