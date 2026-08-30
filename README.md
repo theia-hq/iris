@@ -5,6 +5,9 @@ way out and re-hashed on the way in, so a truncated or tampered file is rejected
 
 Powered by [bifrost](https://github.com/theia-hq/bifrost) for the keyed connection.
 
+**The name.** Iris is the messenger of Greek myth, who carried word between parties along the
+rainbow. This carries a file to whoever holds a given key, and checks it arrived whole.
+
 > Experimental. The CLI and wire format will change; not ready for production use.
 
 ## Installation
