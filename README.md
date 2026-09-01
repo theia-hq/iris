@@ -1,5 +1,7 @@
 # iris
 
+> Archived: folded into [swoosh](https://github.com/theia-hq/swoosh) as `swoosh beam`. Use that.
+
 Send files to a machine you address by its public key, not its location. Each transfer is hashed on the
 way out and re-hashed on the way in, so a truncated or tampered file is rejected rather than saved.
 
